@@ -18,7 +18,7 @@ class HBNBCommand(cmd.Cmd):
         '** no instance found **',
         '** attribute name missing **',
         '** value missing **',
-        ]
+    ]
 
     def preloop(self):
         """
@@ -89,8 +89,8 @@ class HBNBCommand(cmd.Cmd):
         """airbnb: airbnb
         SYNOPSIS: Command changes prompt string"""
         print("                      __ ___                        ")
-        print("    _     _  _ _||\ |/  \ | _  _  _|_|_     _  _ _| ")
-        print("|_||_)\)/(_|| (_|| \|\__/ || )(_)| |_| )\)/(_|| (_| ")
+        print(r"    _     _  _ _||\ |/  \ | _  _  _|_|_     _  _ _| ")
+        print(r"|_||_)\)/(_|| (_|| \|\__/ || )(_)| |_| )\)/(_|| (_| ")
         print("   |                                                ")
         if HBNBCommand.prompt == '(hbnb) ':
             HBNBCommand.prompt = " /_ /_ _  /_\n/ //_// //_/ "
@@ -117,7 +117,7 @@ class HBNBCommand(cmd.Cmd):
         try:
             float(val)
             return True
-        except:
+        except BaseException:
             return False
 
     def __update_val(self, v):
@@ -377,6 +377,7 @@ class HBNBCommand(cmd.Cmd):
                     v(new_arg)
                     return
         self.default(arg)
+
 
 if __name__ == '__main__':
     """
