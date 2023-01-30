@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="../static/styles/static/hbnb-icon.png" type="image/x-icon">
+    <link rel="stylesheet" href="../static/styles/4-common.css?{{ cache_id }}">
+    <title>Document</title>
+</head>
+<body>
+    <header>
+        <img src="../static/styles/static/hbnb-logo.png" alt="hbnb logo">
+    </header>
+    <main>
+        <div class="container">
+            <section class="filters">
+                <div class="flex">
+                    <div class="locations">
+                        <h3>States</h3>
+                        <h4>&nbsp;</h4>
+                        <ul class="popover">
+                            {% for state in states.values()|sort(attribute="name") %}
+                                <li><h2>{{ state.name }}</h2></li>
+                                <ul>
+                                    {% for city in state.cities|sort(attribute="name") %}
+                                        <li><h4>{{ city.name }}</h4></li>
+                                    {% endfor %}
+                                </ul>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="amenities">
+                        <h3>Amenities</h3>
+                        <h4>&nbsp;</h4>
+                        <ul class="popover">
+                            {% for amenity in amenities.values()|sort(attribute="name") %}
+                            <li><h4>{{ amenity.name }}</h4>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <button> Search </button>
+            </section>
+            <section class="places">
+                <h1>Places</h1>
+                <div class="new-flex">
+                    {% for place in places.values() %}
+                    <article>
+                        <div class="new-flex">
+                            <h2>{{ place.name }}</h2>
+                            <div class="price_by_night">
+                                <p> {{ place.prices_by_night }} </p>
+                            </div>
+                        </div>
+                        <div class="information">
+                            <div class="new-flex">
+                                <div class="max_guest">
+                                    <img src="../static/styles/static/max-guest.png" alt="">
+                                    <p> {{ place.max_guest }} Guests</p>
+                                </div>
+                                <div class="number_rooms">
+                                    <img src="../static/styles/static/icon_bed.png" alt="">
+                                    <p>{{ place.number_of_rooms }} Bedroom</p>
+                                </div>
+                                <div class="number_bathrooms">
+                                    <img src="../static/styles/static/icon_bath.png" alt="">
+                                    <p>{{ place.number_of_bathrooms }} Bathroom</p>
+                                </div>
+                            </div>
+                            <div class="user">
+                                <p>
+                                    <strong>Owner</strong>
+                                    {{ place.owner }}
+                                </p>
+                            </div>
+                            <div class="description">
+                                <p>
+                                    {{ place.description }}
+                                </p>
+                            </div>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </main>
+    <footer>
+        <p> Best School </p>
+    </footer>
+</body>
+</html>
