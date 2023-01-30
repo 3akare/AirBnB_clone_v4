@@ -1,140 +1,178 @@
 #!/usr/bin/python3
-"""
-Unit Test for User Class
-"""
-from datetime import datetime
-import inspect
-import json
-import models
-from os import environ, stat
+"""Defines unnittests for models/user.py."""
+import os
 import pep8
+import models
+import MySQLdb
 import unittest
-
-User = models.user.User
-BaseModel = models.base_model.BaseModel
-STORAGE_TYPE = environ.get('HBNB_TYPE_STORAGE')
-
-
-class TestUserDocs(unittest.TestCase):
-    """Class for testing User Class docs"""
-
-    all_funcs = inspect.getmembers(User, inspect.isfunction)
-
-    @classmethod
-    def setUpClass(cls):
-        print('\n\n.................................')
-        print('..... Testing Documentation .....')
-        print('........   User  Class   ........')
-        print('.................................\n\n')
-
-    def test_doc_file(self):
-        """... documentation for the file"""
-        expected = '\nUser Class from Models Module\n'
-        actual = models.user.__doc__
-        self.assertEqual(expected, actual)
-
-    def test_doc_class(self):
-        """... documentation for the class"""
-        actual = User.__doc__
-        self.assertIsNotNone(actual)
-
-    def test_all_function_docs(self):
-        """... tests for ALL DOCS for all functions in db_storage file"""
-        all_functions = TestUserDocs.all_funcs
-        for function in all_functions:
-            self.assertIsNotNone(function[1].__doc__)
-
-    def test_pep8_user(self):
-        """... user.py conforms to PEP8 Style"""
-        pep8style = pep8.StyleGuide(quiet=True)
-        errors = pep8style.check_files(['models/user.py'])
-        self.assertEqual(errors.total_errors, 0, errors.messages)
-
-    def test_file_is_executable(self):
-        """... tests if file has correct permissions so user can execute"""
-        file_stat = stat('models/user.py')
-        permissions = str(oct(file_stat[0]))
-        actual = int(permissions[5:-2]) >= 5
-        self.assertTrue(actual)
+from datetime import datetime
+from models.base_model import Base, BaseModel
+from models.user import User
+from models.engine.db_storage import DBStorage
+from models.engine.file_storage import FileStorage
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
 
 
-class TestUserInstances(unittest.TestCase):
-    """testing for class instances"""
+class TestUser(unittest.TestCase):
+    """Unittests for testing the User class."""
 
     @classmethod
     def setUpClass(cls):
-        print('\n\n.................................')
-        print('....... Testing Functions .......')
-        print('.........  User  Class  .........')
-        print('.................................\n\n')
+        """User testing setup.
 
-    def setUp(self):
-        """initializes new user for testing"""
-        self.user = User()
+        Temporarily renames any existing file.json.
+        Resets FileStorage objects dictionary.
+        Creates FileStorage, DBStorage and User instances for testing.
+        """
+        try:
+            os.rename("file.json", "tmp")
+        except IOError:
+            pass
+        FileStorage._FileStorage__objects = {}
+        cls.filestorage = FileStorage()
+        cls.user = User(email="poppy@holberton.com", password="betty98")
 
-    def test_instantiation(self):
-        """... checks if User is properly instantiated"""
+        if type(models.storage) == DBStorage:
+            cls.dbstorage = DBStorage()
+            Base.metadata.create_all(cls.dbstorage._DBStorage__engine)
+            Session = sessionmaker(bind=cls.dbstorage._DBStorage__engine)
+            cls.dbstorage._DBStorage__session = Session()
+
+    @classmethod
+    def tearDownClass(cls):
+        """User testing teardown.
+
+        Restore original file.json.
+        Delete the FileStorage, DBStorage and User test instances.
+        """
+        try:
+            os.remove("file.json")
+        except IOError:
+            pass
+        try:
+            os.rename("tmp", "file.json")
+        except IOError:
+            pass
+        del cls.user
+        del cls.filestorage
+        if type(models.storage) == DBStorage:
+            cls.dbstorage._DBStorage__session.close()
+            del cls.dbstorage
+
+    def test_pep8(self):
+        """Test pep8 styling."""
+        style = pep8.StyleGuide(quiet=True)
+        p = style.check_files(["models/user.py"])
+        self.assertEqual(p.total_errors, 0, "fix pep8")
+
+    def test_docstrings(self):
+        """Check for docstrings."""
+        self.assertIsNotNone(User.__doc__)
+
+    def test_attributes(self):
+        """Check for attributes."""
+        us = User(email="a", password="a")
+        self.assertEqual(str, type(us.id))
+        self.assertEqual(datetime, type(us.created_at))
+        self.assertEqual(datetime, type(us.updated_at))
+        self.assertTrue(hasattr(us, "__tablename__"))
+        self.assertTrue(hasattr(us, "email"))
+        self.assertTrue(hasattr(us, "password"))
+        self.assertTrue(hasattr(us, "first_name"))
+        self.assertTrue(hasattr(us, "last_name"))
+        self.assertTrue(hasattr(us, "places"))
+        self.assertTrue(hasattr(us, "reviews"))
+
+    @unittest.skipIf(type(models.storage) == FileStorage,
+                     "Testing FileStorage")
+    def test_email_not_nullable(self):
+        """Test that email attribute is non-nullable."""
+        with self.assertRaises(OperationalError):
+            self.dbstorage._DBStorage__session.add(User(password="a"))
+            self.dbstorage._DBStorage__session.commit()
+        self.dbstorage._DBStorage__session.rollback()
+        with self.assertRaises(OperationalError):
+            self.dbstorage._DBStorage__session.add(User(email="a"))
+            self.dbstorage._DBStorage__session.commit()
+
+    def test_is_subclass(self):
+        """Check that User is a subclass of BaseModel."""
+        self.assertTrue(issubclass(User, BaseModel))
+
+    def test_init(self):
+        """Test initialization."""
         self.assertIsInstance(self.user, User)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_to_string(self):
-        """... checks if BaseModel is properly casted to string"""
-        my_str = str(self.user)
-        my_list = ['User', 'id', 'created_at']
-        actual = 0
-        for sub_str in my_list:
-            if sub_str in my_str:
-                actual += 1
-        self.assertTrue(3 == actual)
+    def test_two_models_are_unique(self):
+        """Test that different User instances are unique."""
+        us = User(email="a", password="a")
+        self.assertNotEqual(self.user.id, us.id)
+        self.assertLess(self.user.created_at, us.created_at)
+        self.assertLess(self.user.updated_at, us.updated_at)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_instantiation_no_updated(self):
-        """... should not have updated attribute"""
-        self.user = User()
-        my_str = str(self.user)
-        actual = 0
-        if 'updated_at' in my_str:
-            actual += 1
-        self.assertTrue(0 == actual)
+    def test_init_args_kwargs(self):
+        """Test initialization with args and kwargs."""
+        dt = datetime.utcnow()
+        st = User("1", id="5", created_at=dt.isoformat())
+        self.assertEqual(st.id, "5")
+        self.assertEqual(st.created_at, dt)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_updated_at(self):
-        """... save function should add updated_at attribute"""
+    def test_str(self):
+        """Test __str__ representation."""
+        s = self.user.__str__()
+        self.assertIn("[User] ({})".format(self.user.id), s)
+        self.assertIn("'id': '{}'".format(self.user.id), s)
+        self.assertIn("'created_at': {}".format(
+            repr(self.user.created_at)), s)
+        self.assertIn("'updated_at': {}".format(
+            repr(self.user.updated_at)), s)
+        self.assertIn("'email': '{}'".format(self.user.email), s)
+        self.assertIn("'password': '{}'".format(self.user.password), s)
+
+    @unittest.skipIf(type(models.storage) == DBStorage,
+                     "Testing DBStorage")
+    def test_save_filestorage(self):
+        """Test save method with FileStorage."""
+        old = self.user.updated_at
         self.user.save()
-        actual = type(self.user.updated_at)
-        expected = type(datetime.now())
-        self.assertEqual(expected, actual)
+        self.assertLess(old, self.user.updated_at)
+        with open("file.json", "r") as f:
+            self.assertIn("User." + self.user.id, f.read())
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_to_json(self):
-        """... to_json should return serializable dict object"""
-        self.user_json = self.user.to_json()
-        actual = 1
-        try:
-            serialized = json.dumps(self.user_json)
-        except:
-            actual = 0
-        self.assertTrue(1 == actual)
+    @unittest.skipIf(type(models.storage) == FileStorage,
+                     "Testing FileStorage")
+    def test_save_dbstorage(self):
+        """Test save method with DBStorage."""
+        old = self.user.updated_at
+        self.user.save()
+        self.assertLess(old, self.user.updated_at)
+        db = MySQLdb.connect(user="hbnb_test",
+                             passwd="hbnb_test_pwd",
+                             db="hbnb_test_db")
+        cursor = db.cursor()
+        cursor.execute("SELECT * \
+                          FROM `users` \
+                         WHERE BINARY email = '{}'".
+                       format(self.user.email))
+        query = cursor.fetchall()
+        self.assertEqual(1, len(query))
+        self.assertEqual(self.user.id, query[0][0])
+        cursor.close()
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_json_class(self):
-        """... to_json should include class key with value User"""
-        self.user_json = self.user.to_json()
-        actual = None
-        if self.user_json['__class__']:
-            actual = self.user_json['__class__']
-        expected = 'User'
-        self.assertEqual(expected, actual)
+    def test_to_dict(self):
+        """Test to_dict method."""
+        user_dict = self.user.to_dict()
+        self.assertEqual(dict, type(user_dict))
+        self.assertEqual(self.user.id, user_dict["id"])
+        self.assertEqual("User", user_dict["__class__"])
+        self.assertEqual(self.user.created_at.isoformat(),
+                         user_dict["created_at"])
+        self.assertEqual(self.user.updated_at.isoformat(),
+                         user_dict["updated_at"])
+        self.assertEqual(self.user.email, user_dict["email"])
+        self.assertEqual(self.user.password, user_dict["password"])
 
-    def test_email_attribute(self):
-        """... add email attribute"""
-        self.user.email = "bettyholbertn@gmail.com"
-        if hasattr(self.user, 'email'):
-            actual = self.user.email
-        else:
-            actual = ''
-        expected = "bettyholbertn@gmail.com"
-        self.assertEqual(expected, actual)
 
-if __name__ == '__main__':
-    unittest.main
+if __name__ == "__main__":
+    unittest.main()

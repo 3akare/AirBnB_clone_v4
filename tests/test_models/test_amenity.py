@@ -1,140 +1,172 @@
 #!/usr/bin/python3
-"""
-Unit Test for Amenity Class
-"""
-from datetime import datetime
-import inspect
-import json
-import models
-from os import environ, stat
+"""Defines unnittests for models/amenity.py."""
+import os
 import pep8
+import models
+import MySQLdb
 import unittest
-
-Amenity = models.amenity.Amenity
-BaseModel = models.base_model.BaseModel
-STORAGE_TYPE = environ.get('HBNB_TYPE_STORAGE')
-
-
-class TestAmenityDocs(unittest.TestCase):
-    """Class for testing BaseModel docs"""
-
-    all_funcs = inspect.getmembers(Amenity, inspect.isfunction)
-
-    @classmethod
-    def setUpClass(cls):
-        print('\n\n.................................')
-        print('..... Testing Documentation .....')
-        print('........   Amenity  Class   ........')
-        print('.................................\n\n')
-
-    def test_doc_file(self):
-        """... documentation for the file"""
-        expected = '\nAmenity Class from Models Module\n'
-        actual = models.amenity.__doc__
-        self.assertEqual(expected, actual)
-
-    def test_doc_class(self):
-        """... documentation for the class"""
-        expected = 'Amenity class handles all application amenities'
-        actual = Amenity.__doc__
-        self.assertEqual(expected, actual)
-
-    def test_all_function_docs(self):
-        """... tests for ALL DOCS for all functions in db_storage file"""
-        all_functions = TestAmenityDocs.all_funcs
-        for function in all_functions:
-            self.assertIsNotNone(function[1].__doc__)
-
-    def test_pep8_amenity(self):
-        """... amenity.py conforms to PEP8 Style"""
-        pep8style = pep8.StyleGuide(quiet=True)
-        errors = pep8style.check_files(['models/amenity.py'])
-        self.assertEqual(errors.total_errors, 0, errors.messages)
-
-    def test_file_is_executable(self):
-        """... tests if file has correct permissions so user can execute"""
-        file_stat = stat('models/amenity.py')
-        permissions = str(oct(file_stat[0]))
-        actual = int(permissions[5:-2]) >= 5
-        self.assertTrue(actual)
+from datetime import datetime
+from models.base_model import Base
+from models.base_model import BaseModel
+from models.amenity import Amenity
+from models.engine.db_storage import DBStorage
+from models.engine.file_storage import FileStorage
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
 
 
-class TestAmenityInstances(unittest.TestCase):
-    """testing for class instances"""
+class TestAmenity(unittest.TestCase):
+    """Unittests for testing the Amenity class."""
 
     @classmethod
     def setUpClass(cls):
-        print('\n\n.................................')
-        print('....... Testing Functions .......')
-        print('.........  Amenity  Class  .........')
-        print('.................................\n\n')
+        """Amenity testing setup.
 
-    def setUp(self):
-        """initializes new amenity for testing"""
-        self.amenity = Amenity()
+        Temporarily renames any existing file.json.
+        Resets FileStorage objects dictionary.
+        Creates FileStorage, DBStorage and Amenity instances for testing.
+        """
+        try:
+            os.rename("file.json", "tmp")
+        except IOError:
+            pass
+        FileStorage._FileStorage__objects = {}
+        cls.filestorage = FileStorage()
+        cls.amenity = Amenity(name="The Andrew Lindburg treatment")
 
-    def test_instantiation(self):
-        """... checks if Amenity is properly instantiated"""
+        if type(models.storage) == DBStorage:
+            cls.dbstorage = DBStorage()
+            Base.metadata.create_all(cls.dbstorage._DBStorage__engine)
+            Session = sessionmaker(bind=cls.dbstorage._DBStorage__engine)
+            cls.dbstorage._DBStorage__session = Session()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Amenity testing teardown.
+        Restore original file.json.
+        Delete the FileStorage, DBStorage and Amenity test instances.
+        """
+        try:
+            os.remove("file.json")
+        except IOError:
+            pass
+        try:
+            os.rename("tmp", "file.json")
+        except IOError:
+            pass
+        del cls.amenity
+        del cls.filestorage
+        if type(models.storage) == DBStorage:
+            cls.dbstorage._DBStorage__session.close()
+            del cls.dbstorage
+
+    def test_pep8(self):
+        """Test pep8 styling."""
+        style = pep8.StyleGuide(quiet=True)
+        p = style.check_files(["models/amenity.py"])
+        self.assertEqual(p.total_errors, 0, "fix pep8")
+
+    def test_docstrings(self):
+        """Check for docstrings."""
+        self.assertIsNotNone(Amenity.__doc__)
+
+    def test_attributes(self):
+        """Check for attributes."""
+        us = Amenity(email="a", password="a")
+        self.assertEqual(str, type(us.id))
+        self.assertEqual(datetime, type(us.created_at))
+        self.assertEqual(datetime, type(us.updated_at))
+        self.assertTrue(hasattr(us, "__tablename__"))
+        self.assertTrue(hasattr(us, "name"))
+        self.assertTrue(hasattr(us, "place_amenities"))
+
+    @unittest.skipIf(type(models.storage) == FileStorage,
+                     "Testing FileStorage")
+    def test_email_not_nullable(self):
+        """Test that email attribute is non-nullable."""
+        with self.assertRaises(OperationalError):
+            self.dbstorage._DBStorage__session.add(Amenity(password="a"))
+            self.dbstorage._DBStorage__session.commit()
+        self.dbstorage._DBStorage__session.rollback()
+        with self.assertRaises(OperationalError):
+            self.dbstorage._DBStorage__session.add(Amenity(email="a"))
+            self.dbstorage._DBStorage__session.commit()
+
+    def test_is_subclass(self):
+        """Check that Amenity is a subclass of BaseModel."""
+        self.assertTrue(issubclass(Amenity, BaseModel))
+
+    def test_init(self):
+        """Test initialization."""
         self.assertIsInstance(self.amenity, Amenity)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_to_string(self):
-        """... checks if BaseModel is properly casted to string"""
-        my_str = str(self.amenity)
-        my_list = ['Amenity', 'id', 'created_at']
-        actual = 0
-        for sub_str in my_list:
-            if sub_str in my_str:
-                actual += 1
-        self.assertTrue(3 == actual)
+    def test_two_models_are_unique(self):
+        """Test that different Amenity instances are unique."""
+        us = Amenity(email="a", password="a")
+        self.assertNotEqual(self.amenity.id, us.id)
+        self.assertLess(self.amenity.created_at, us.created_at)
+        self.assertLess(self.amenity.updated_at, us.updated_at)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_instantiation_no_updated(self):
-        """... should not have updated attribute"""
-        my_str = str(self.amenity)
-        actual = 0
-        if 'updated_at' in my_str:
-            actual += 1
-        self.assertTrue(0 == actual)
+    def test_init_args_kwargs(self):
+        """Test initialization with args and kwargs."""
+        dt = datetime.utcnow()
+        st = Amenity("1", id="5", created_at=dt.isoformat())
+        self.assertEqual(st.id, "5")
+        self.assertEqual(st.created_at, dt)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_updated_at(self):
-        """... save function should add updated_at attribute"""
+    def test_str(self):
+        """Test __str__ representation."""
+        s = self.amenity.__str__()
+        self.assertIn("[Amenity] ({})".format(self.amenity.id), s)
+        self.assertIn("'id': '{}'".format(self.amenity.id), s)
+        self.assertIn("'created_at': {}".format(
+            repr(self.amenity.created_at)), s)
+        self.assertIn("'updated_at': {}".format(
+            repr(self.amenity.updated_at)), s)
+        self.assertIn("'name': '{}'".format(self.amenity.name), s)
+
+    @unittest.skipIf(type(models.storage) == DBStorage,
+                     "Testing DBStorage")
+    def test_save_filestorage(self):
+        """Test save method with FileStorage."""
+        old = self.amenity.updated_at
         self.amenity.save()
-        actual = type(self.amenity.updated_at)
-        expected = type(datetime.now())
-        self.assertEqual(expected, actual)
+        self.assertLess(old, self.amenity.updated_at)
+        with open("file.json", "r") as f:
+            self.assertIn("Amenity." + self.amenity.id, f.read())
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_to_json(self):
-        """... to_json should return serializable dict object"""
-        self.amenity_json = self.amenity.to_json()
-        actual = 1
-        try:
-            serialized = json.dumps(self.amenity_json)
-        except:
-            actual = 0
-        self.assertTrue(1 == actual)
+    @unittest.skipIf(type(models.storage) == FileStorage,
+                     "Testing FileStorage")
+    def test_save_dbstorage(self):
+        """Test save method with DBStorage."""
+        old = self.amenity.updated_at
+        self.amenity.save()
+        self.assertLess(old, self.amenity.updated_at)
+        db = MySQLdb.connect(user="hbnb_test",
+                             passwd="hbnb_test_pwd",
+                             db="hbnb_test_db")
+        cursor = db.cursor()
+        cursor.execute("SELECT * \
+                          FROM `amenities` \
+                         WHERE BINARY name = '{}'".
+                       format(self.amenity.name))
+        query = cursor.fetchall()
+        self.assertEqual(1, len(query))
+        self.assertEqual(self.amenity.id, query[0][0])
+        cursor.close()
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_json_class(self):
-        """... to_json should include class key with value Amenity"""
-        self.amenity_json = self.amenity.to_json()
-        actual = None
-        if self.amenity_json['__class__']:
-            actual = self.amenity_json['__class__']
-        expected = 'Amenity'
-        self.assertEqual(expected, actual)
+    def test_to_dict(self):
+        """Test to_dict method."""
+        amenity_dict = self.amenity.to_dict()
+        self.assertEqual(dict, type(amenity_dict))
+        self.assertEqual(self.amenity.id, amenity_dict["id"])
+        self.assertEqual("Amenity", amenity_dict["__class__"])
+        self.assertEqual(self.amenity.created_at.isoformat(),
+                         amenity_dict["created_at"])
+        self.assertEqual(self.amenity.updated_at.isoformat(),
+                         amenity_dict["updated_at"])
+        self.assertEqual(self.amenity.name, amenity_dict["name"])
 
-    def test_amenity_attribute(self):
-        """... add amenity attribute"""
-        self.amenity.name = "greatWifi"
-        if hasattr(self.amenity, 'name'):
-            actual = self.amenity.name
-        else:
-            actual = ''
-        expected = "greatWifi"
-        self.assertEqual(expected, actual)
 
-if __name__ == '__main__':
-    unittest.main
+if __name__ == "__main__":
+    unittest.main()

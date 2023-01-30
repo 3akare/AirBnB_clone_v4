@@ -1,48 +1,40 @@
 #!/usr/bin/python3
-"""
-    Sript that starts a Flask web application
- """
+'''A minimal Flask Application'''
 from flask import Flask
 app = Flask(__name__)
 
 
 @app.route('/', strict_slashes=False)
-def hello_hbn():
-    """
-        function to return Hello HBNB!
-    """
-    return "Hello HBNB!"
+def hello_hbnb():
+    '''home'''
+    return 'Hello HBNB!'
 
 
 @app.route('/hbnb', strict_slashes=False)
 def hbnb():
-    """
-        function to return HBNB
-    """
-    return "HBNB"
+    '''Display hbnb'''
+    return 'HBNB'
 
 
 @app.route('/c/<text>', strict_slashes=False)
-def text_var(text):
-    """
-        function to display text variable passed in
-    """
-    return "C {}".format(text.replace("_", " "))
+def c(text):
+    '''Display C <text>'''
+    text = text.replace("_", " ")
+    return 'C {}'.format(text)
 
 
+@app.route('/python', strict_slashes=False)
 @app.route('/python/<text>', strict_slashes=False)
-def text_var_python(text="is cool"):
-    """
-        function to display text variable, with default "is cool"
-    """
-    return "Python {}".format(text.replace("_", " "))
+def python(text='is cool'):
+    '''Display Python <text> or Python is cool'''
+    text = text.replace("_", " ")
+    return 'Python {}'.format(text)
 
 
 @app.route('/number/<int:n>', strict_slashes=False)
-def var_num(n):
-        """
-             function to display a variable, but only if an int
-        """
-        return "{} is a number".format(n)
+def number(n):
+    return '{} is a number'.format(n)
+
+
 if __name__ == '__main__':
-        app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True, host="0.0.0.0")

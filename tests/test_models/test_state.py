@@ -1,140 +1,180 @@
 #!/usr/bin/python3
-"""
-Unit Test for State Class
-"""
-from datetime import datetime
-import inspect
-import json
-import models
-from os import environ, stat
+"""Defines unnittests for models/state.py."""
+import os
 import pep8
+import models
+import MySQLdb
 import unittest
-
-State = models.state.State
-BaseModel = models.base_model.BaseModel
-STORAGE_TYPE = environ.get('HBNB_TYPE_STORAGE')
-
-
-class TestStateDocs(unittest.TestCase):
-    """Class for testing State docs"""
-
-    all_funcs = inspect.getmembers(State, inspect.isfunction)
-
-    @classmethod
-    def setUpClass(cls):
-        print('\n\n.................................')
-        print('..... Testing Documentation .....')
-        print('........   State Class   ........')
-        print('.................................\n\n')
-
-    def test_doc_file(self):
-        """... documentation for the file"""
-        expected = '\nState Class from Models Module\n'
-        actual = models.state.__doc__
-        self.assertEqual(expected, actual)
-
-    def test_doc_class(self):
-        """... documentation for the class"""
-        expected = 'State class handles all application states'
-        actual = State.__doc__
-        self.assertEqual(expected, actual)
-
-    def test_all_function_docs(self):
-        """... tests for ALL DOCS for all functions in db_storage file"""
-        all_functions = TestStateDocs.all_funcs
-        for function in all_functions:
-            self.assertIsNotNone(function[1].__doc__)
-
-    def test_pep8_state(self):
-        """... state.py conforms to PEP8 Style"""
-        pep8style = pep8.StyleGuide(quiet=True)
-        errors = pep8style.check_files(['models/state.py'])
-        self.assertEqual(errors.total_errors, 0, errors.messages)
-
-    def test_file_is_executable(self):
-        """... tests if file has correct permissions so user can execute"""
-        file_stat = stat('models/state.py')
-        permissions = str(oct(file_stat[0]))
-        actual = int(permissions[5:-2]) >= 5
-        self.assertTrue(actual)
+from datetime import datetime
+from models.base_model import Base, BaseModel
+from models.city import City
+from models.state import State
+from models.engine.db_storage import DBStorage
+from models.engine.file_storage import FileStorage
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
 
 
-class TestStateInstances(unittest.TestCase):
-    """testing for class instances"""
+class TestState(unittest.TestCase):
+    """Unittests for testing the State class."""
 
     @classmethod
     def setUpClass(cls):
-        print('\n\n.................................')
-        print('....... Testing Functions .......')
-        print('.........  State Class  .........')
-        print('.................................\n\n')
+        """State testing setup.
 
-    def setUp(self):
-        """initializes new state for testing"""
-        self.state = State()
+        Temporarily renames any existing file.json.
+        Resets FileStorage objects dictionary.
+        Creates FileStorage, DBStorage and State instances for testing.
+        """
+        try:
+            os.rename("file.json", "tmp")
+        except IOError:
+            pass
+        FileStorage._FileStorage__objects = {}
+        cls.filestorage = FileStorage()
+        cls.state = State(name="California")
+        cls.city = City(name="San Jose", state_id=cls.state.id)
 
-    def test_instantiation(self):
-        """... checks if State is properly instantiated"""
+        if type(models.storage) == DBStorage:
+            cls.dbstorage = DBStorage()
+            Base.metadata.create_all(cls.dbstorage._DBStorage__engine)
+            Session = sessionmaker(bind=cls.dbstorage._DBStorage__engine)
+            cls.dbstorage._DBStorage__session = Session()
+
+    @classmethod
+    def tearDownClass(cls):
+        """State testing teardown.
+
+        Restore original file.json.
+        Delete the FileStorage, DBStorage and State test instances.
+        """
+        try:
+            os.remove("file.json")
+        except IOError:
+            pass
+        try:
+            os.rename("tmp", "file.json")
+        except IOError:
+            pass
+        del cls.state
+        del cls.city
+        del cls.filestorage
+        if type(models.storage) == DBStorage:
+            cls.dbstorage._DBStorage__session.close()
+            del cls.dbstorage
+
+    def test_pep8(self):
+        """Test pep8 styling."""
+        style = pep8.StyleGuide(quiet=True)
+        p = style.check_files(["models/state.py"])
+        self.assertEqual(p.total_errors, 0, "fix pep8")
+
+    def test_docstrings(self):
+        """Check for docstrings."""
+        self.assertIsNotNone(State.__doc__)
+
+    def test_attributes(self):
+        """Check for attributes."""
+        st = State()
+        self.assertEqual(str, type(st.id))
+        self.assertEqual(datetime, type(st.created_at))
+        self.assertEqual(datetime, type(st.updated_at))
+        self.assertTrue(hasattr(st, "name"))
+
+    @unittest.skipIf(type(models.storage) == FileStorage,
+                     "Testing FileStorage")
+    def test_nullable_attributes(self):
+        """Check that relevant DBStorage attributes are non-nullable."""
+        with self.assertRaises(OperationalError):
+            self.dbstorage._DBStorage__session.add(State())
+            self.dbstorage._DBStorage__session.commit()
+        self.dbstorage._DBStorage__session.rollback()
+
+    @unittest.skipIf(type(models.storage) == DBStorage,
+                     "Testing DBStorage")
+    def test_cities(self):
+        """Test reviews attribute."""
+        key = "{}.{}".format(type(self.city).__name__, self.city.id)
+        self.filestorage._FileStorage__objects[key] = self.city
+        cities = self.state.cities
+        self.assertTrue(list, type(cities))
+        self.assertIn(self.city, cities)
+
+    def test_is_subclass(self):
+        """Check that State is a subclass of BaseModel."""
+        self.assertTrue(issubclass(State, BaseModel))
+
+    def test_init(self):
+        """Test initialization."""
         self.assertIsInstance(self.state, State)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_to_string(self):
-        """... checks if BaseModel is properly casted to string"""
-        my_str = str(self.state)
-        my_list = ['State', 'id', 'created_at']
-        actual = 0
-        for sub_str in my_list:
-            if sub_str in my_str:
-                actual += 1
-        self.assertTrue(3 == actual)
+    def test_two_models_are_unique(self):
+        """Test that different State instances are unique."""
+        st = State()
+        self.assertNotEqual(self.state.id, st.id)
+        self.assertLess(self.state.created_at, st.created_at)
+        self.assertLess(self.state.updated_at, st.updated_at)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_instantiation_no_updated(self):
-        """... should not have updated attribute"""
-        my_str = str(self.state)
-        actual = 0
-        if 'updated_at' in my_str:
-            actual += 1
-        self.assertTrue(0 == actual)
+    def test_init_args_kwargs(self):
+        """Test initialization with args and kwargs."""
+        dt = datetime.utcnow()
+        st = State("1", id="5", created_at=dt.isoformat())
+        self.assertEqual(st.id, "5")
+        self.assertEqual(st.created_at, dt)
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_updated_at(self):
-        """... save function should add updated_at attribute"""
+    def test_str(self):
+        """Test __str__ representation."""
+        s = self.state.__str__()
+        self.assertIn("[State] ({})".format(self.state.id), s)
+        self.assertIn("'id': '{}'".format(self.state.id), s)
+        self.assertIn("'created_at': {}".format(
+            repr(self.state.created_at)), s)
+        self.assertIn("'updated_at': {}".format(
+            repr(self.state.updated_at)), s)
+        self.assertIn("'name': '{}'".format(self.state.name), s)
+
+    @unittest.skipIf(type(models.storage) == DBStorage,
+                     "Testing DBStorage")
+    def test_save_filestorage(self):
+        """Test save method with FileStorage."""
+        old = self.state.updated_at
         self.state.save()
-        actual = type(self.state.updated_at)
-        expected = type(datetime.now())
-        self.assertEqual(expected, actual)
+        self.assertLess(old, self.state.updated_at)
+        with open("file.json", "r") as f:
+            self.assertIn("State." + self.state.id, f.read())
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_to_json(self):
-        """... to_json should return serializable dict object"""
-        self.state_json = self.state.to_json()
-        actual = 1
-        try:
-            serialized = json.dumps(self.state_json)
-        except:
-            actual = 0
-        self.assertTrue(1 == actual)
+    @unittest.skipIf(type(models.storage) == FileStorage,
+                     "Testing FileStorage")
+    def test_save_dbstorage(self):
+        """Test save method with DBStorage."""
+        old = self.state.updated_at
+        self.state.save()
+        self.assertLess(old, self.state.updated_at)
+        db = MySQLdb.connect(user="hbnb_test",
+                             passwd="hbnb_test_pwd",
+                             db="hbnb_test_db")
+        cursor = db.cursor()
+        cursor.execute("SELECT * \
+                          FROM `states` \
+                         WHERE BINARY name = '{}'".
+                       format(self.state.name))
+        query = cursor.fetchall()
+        self.assertEqual(1, len(query))
+        self.assertEqual(self.state.id, query[0][0])
+        cursor.close()
 
-    @unittest.skipIf(STORAGE_TYPE == 'db', 'skip if environ is db')
-    def test_json_class(self):
-        """... to_json should include class key with value State"""
-        self.state_json = self.state.to_json()
-        actual = None
-        if self.state_json['__class__']:
-            actual = self.state_json['__class__']
-        expected = 'State'
-        self.assertEqual(expected, actual)
+    def test_to_dict(self):
+        """Test to_dict method."""
+        state_dict = self.state.to_dict()
+        self.assertEqual(dict, type(state_dict))
+        self.assertEqual(self.state.id, state_dict["id"])
+        self.assertEqual("State", state_dict["__class__"])
+        self.assertEqual(self.state.created_at.isoformat(),
+                         state_dict["created_at"])
+        self.assertEqual(self.state.updated_at.isoformat(),
+                         state_dict["updated_at"])
+        self.assertEqual(self.state.name, state_dict["name"])
 
-    def test_name_attribute(self):
-        """... add name attribute"""
-        self.state.name = "betty"
-        if hasattr(self.state, 'name'):
-            actual = self.state.name
-        else:
-            acual = ''
-        expected = "betty"
-        self.assertEqual(expected, actual)
 
-if __name__ == '__main__':
-    unittest.main
+if __name__ == "__main__":
+    unittest.main()
