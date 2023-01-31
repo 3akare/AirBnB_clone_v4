@@ -17,6 +17,15 @@ class FileStorage:
         __file_path (str): The name of the file to save objects to.
         __objects (dict): A dictionary of instantiated objects.
     """
+    CNC = {
+        'BaseModel': BaseModel,
+        'Amenity': Amenity,
+        'City': City,
+        'Place': Place,
+        'Review': Review,
+        'State': State,
+        'User': User
+    }
 
     __file_path = "file.json"
     __objects = {}

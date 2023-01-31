@@ -22,7 +22,15 @@ class DBStorage:
         __engine (sqlalchemy.Engine): The working SQLAlchemy engine.
         __session (sqlalchemy.Session): The working SQLAlchemy session.
     """
-
+    CNC = {
+        'BaseModel': BaseModel,
+        'Amenity': Amenity,
+        'City': City,
+        'Place': Place,
+        'Review': Review,
+        'State': State,
+        'User': User
+    }
     __engine = None
     __session = None
 
