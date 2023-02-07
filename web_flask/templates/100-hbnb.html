@@ -45,7 +45,7 @@
             <section class="places">
                 <h1>Places</h1>
                 <div class="new-flex">
-                    {% for place in places.values() %}
+                    {% for place in places.values()|sort(attribute="name") %}
                     <article>
                         <div class="new-flex">
                             <h2>{{ place.name }}</h2>
